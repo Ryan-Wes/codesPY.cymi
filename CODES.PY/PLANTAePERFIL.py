@@ -2,70 +2,70 @@ import fitz  # PyMuPDF
 import os
 import re
 
+# Caminho da pasta com os PDFs
 pasta_pdfs = r"C:\Users\wrlopesr\Downloads\Levante - L102-20250801T134623Z-1-001\Levante - L102\Levante - L102"
 saida_arquivo = os.path.join(pasta_pdfs, "resultado.txt")
 
-# Regex padrão
-regex_torre = re.compile(r"(\d{3}\s*/\s*\d)")
+# Expressões regulares ajustadas
+regex_torre = re.compile(r"(\d{1,3}\s*/\s*\d)")  # agora aceita ex: 0/1, 12/2, 135/1
 regex_x = re.compile(r"X=\s*([\d.,]+)")
 regex_y = re.compile(r"Y=\s*([\d.,]+)")
 regex_ele = re.compile(r"ele=\s*([\d.,]+)")
-regex_angle = re.compile(r"line angle=\s*([^\n\r]+)")
-
-arquivos_lidos = 0
-arquivos_com_erro = []
+regex_angulo = re.compile(r"line angle=\s*([^\n\r]+)")
 
 with open(saida_arquivo, "w", encoding="utf-8") as saida:
+    arquivos_processados = 0
+
     for nome_arquivo in sorted(os.listdir(pasta_pdfs)):
         if nome_arquivo.lower().endswith(".pdf"):
             caminho_pdf = os.path.join(pasta_pdfs, nome_arquivo)
-            try:
-                doc = fitz.open(caminho_pdf)
-                arquivos_lidos += 1
-                saida.write(f"\n=== {nome_arquivo} ===\n")
+            saida.write(f"\n=== {nome_arquivo} ===\n")
+            arquivos_processados += 1
 
-                torres_dict = {}
+            doc = fitz.open(caminho_pdf)
+            texto_total = ""
+            for pagina in doc:
+                texto_total += pagina.get_text()
 
-                for pagina in doc:
-                    blocos = pagina.get_text("blocks")  # pega blocos estruturados (x, y, w, h, text, etc.)
+            linhas = texto_total.split("\n")
+            dados_torres = {}
 
-                    for _, _, _, _, texto, *_ in blocos:
-                        if "X=" in texto and "Y=" in texto and "ele=" in texto:
-                            torre_match = regex_torre.search(texto)
-                            if torre_match:
-                                torre = torre_match.group(1).replace(" ", "")
+            for i, linha in enumerate(linhas):
+                match = regex_torre.search(linha)
+                if match:
+                    torre_raw = match.group(1).replace(" ", "")
+                    if torre_raw not in dados_torres:
+                        bloco = "\n".join(linhas[i:i+20])
+                        x = regex_x.search(bloco)
+                        y = regex_y.search(bloco)
+                        ele = regex_ele.search(bloco)
+                        angulo = regex_angulo.search(bloco)
 
-                                if torre not in torres_dict:
-                                    x = regex_x.search(texto)
-                                    y = regex_y.search(texto)
-                                    ele = regex_ele.search(texto)
-                                    ang = regex_angle.search(texto)
+                        dados_torres[torre_raw] = {
+                            "X": x.group(1) if x else "---",
+                            "Y": y.group(1) if y else "---",
+                            "ele": ele.group(1) if ele else "---",
+                            "line_angle": angulo.group(1) if angulo else "---"
+                        }
 
-                                    torres_dict[torre] = {
-                                        "X": x.group(1) if x else "---",
-                                        "Y": y.group(1) if y else "---",
-                                        "ele": ele.group(1) if ele else "---",
-                                        "angle": ang.group(1) if ang else "---"
-                                    }
+            # Ordenar torres numericamente por prefixo/sufixo
+            def ordena_chave(t):
+                try:
+                    parte = t.split("/")
+                    return (int(parte[0]), int(parte[1]))
+                except:
+                    return (999, 999)
 
-                # Ordenar e escrever
-                for torre in sorted(torres_dict.keys(), key=lambda x: [int(n) for n in x.split("/")]):
-                    d = torres_dict[torre]
-                    saida.write(f"Torre: {torre}\n")
-                    saida.write(f"X={d['X']}\n")
-                    saida.write(f"Y={d['Y']}\n")
-                    saida.write(f"ele={d['ele']}\n")
-                    saida.write(f"line angle={d['angle']}\n")
-                    saida.write("---\n")
+            for torre in sorted(dados_torres.keys(), key=ordena_chave):
+                info = dados_torres[torre]
+                saida.write(f"Torre: {torre}\n")
+                saida.write(f"X={info['X']}\n")
+                saida.write(f"Y={info['Y']}\n")
+                saida.write(f"ele={info['ele']}\n")
+                saida.write(f"line angle={info['line_angle']}\n")
+                saida.write("---\n")
 
-                doc.close()
+            doc.close()
 
-            except Exception as e:
-                arquivos_com_erro.append((nome_arquivo, str(e)))
-
-print(f"\n✅ PDFs analisados com sucesso: {arquivos_lidos} de 11")
-if arquivos_com_erro:
-    print("⚠️ Arquivos com erro:")
-    for arq, erro in arquivos_com_erro:
-        print(f"- {arq}: {erro}")
+print(f"\n✅ PDFs analisados com sucesso: {arquivos_processados} de {arquivos_processados}")
 print(f"\n📝 Resultado salvo em: {saida_arquivo}")
