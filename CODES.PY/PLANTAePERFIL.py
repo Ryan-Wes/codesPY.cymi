@@ -6,8 +6,8 @@ import re
 pasta_pdfs = r"C:\Users\wrlopesr\Downloads\Levante - L102-20250801T134623Z-1-001\Levante - L102\Levante - L102"
 saida_arquivo = os.path.join(pasta_pdfs, "resultado.txt")
 
-# Expressões regulares ajustadas
-regex_torre = re.compile(r"(\d{1,3}\s*/\s*\d)")  # agora aceita ex: 0/1, 12/2, 135/1
+# Expressões regulares robustas
+regex_torre = re.compile(r"\b0*(\d{1,3})\s*/\s*0*(\d{1,2})\b")  # normaliza 06/4 → 6/4
 regex_x = re.compile(r"X=\s*([\d.,]+)")
 regex_y = re.compile(r"Y=\s*([\d.,]+)")
 regex_ele = re.compile(r"ele=\s*([\d.,]+)")
@@ -33,22 +33,28 @@ with open(saida_arquivo, "w", encoding="utf-8") as saida:
             for i, linha in enumerate(linhas):
                 match = regex_torre.search(linha)
                 if match:
-                    torre_raw = match.group(1).replace(" ", "")
-                    if torre_raw not in dados_torres:
-                        bloco = "\n".join(linhas[i:i+20])
+                    torre_id = f"{int(match.group(1))}/{int(match.group(2))}"
+                    if torre_id not in dados_torres:
+                        # bloco maior para varredura
+                        inicio = max(0, i - 10)
+                        fim = min(len(linhas), i + 40)
+                        bloco = "\n".join(linhas[inicio:fim])
+
                         x = regex_x.search(bloco)
                         y = regex_y.search(bloco)
                         ele = regex_ele.search(bloco)
                         angulo = regex_angulo.search(bloco)
 
-                        dados_torres[torre_raw] = {
-                            "X": x.group(1) if x else "---",
-                            "Y": y.group(1) if y else "---",
-                            "ele": ele.group(1) if ele else "---",
-                            "line_angle": angulo.group(1) if angulo else "---"
-                        }
+                        # só salva se tiver ao menos X, Y e ele
+                        if x and y and ele:
+                            dados_torres[torre_id] = {
+                                "X": x.group(1),
+                                "Y": y.group(1),
+                                "ele": ele.group(1),
+                                "line_angle": angulo.group(1) if angulo else "---"
+                            }
 
-            # Ordenar torres numericamente por prefixo/sufixo
+            # ordena por número real da torre
             def ordena_chave(t):
                 try:
                     parte = t.split("/")
