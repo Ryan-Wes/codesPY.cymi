@@ -8,6 +8,7 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from datetime import datetime
+import time
 
 # =========================
 # CONFIGURAÇÃO
@@ -19,6 +20,24 @@ PASTA_NFS = r"C:\Users\wrlopesr\OneDrive - CYMI CONSTRUÇÕES E PARTICIPAÇÕES 
 # =========================
 # FUNÇÕES AUXILIARES
 # =========================
+def verificar_arquivo_aberto(caminho_arquivo):
+    """Verifica se o arquivo está aberto por outro processo."""
+    try:
+        with open(caminho_arquivo, 'a') as f:
+            pass
+        return False
+    except PermissionError:
+        return True
+
+def esperar_arquivo_liberado(caminho_arquivo, max_tentativas=10):
+    """Aguarda até que o arquivo seja liberado."""
+    for tentativa in range(max_tentativas):
+        if not verificar_arquivo_aberto(caminho_arquivo):
+            return True
+        print(f"Arquivo ocupado. Tentativa {tentativa + 1}/{max_tentativas}...")
+        time.sleep(2)
+    return False
+
 def preprocess_image(pil_img):
     """Melhora a imagem para o OCR."""
     img = np.array(pil_img)
@@ -86,65 +105,74 @@ def extrair_dados(texto):
     fornecedor = identificar_fornecedor(texto_limpo)
     
     return {
-        "CODIGO GRAFICO": "",
-        "CÓDIGO": "",
         "DATA RECEBIMENTO": datetime.today().strftime("%d/%m/%Y"),
         "DESCRIÇÃO ESPECIFICA": descricao.group(1).strip() if descricao else "",
         "NFE": nf_numero.group(1) if nf_numero else "",
         "UNID": unidade.group(1).upper() if unidade else "",
         "QTDD": quantidade.group(1) if quantidade else "",
         "VOLUMES OU BOBINAS OU CONJUNTOS": volumes.group(1) if volumes else "",
-        "QTDD POR UNIDADE": "",
         "FORNECEDOR": fornecedor,
         "VALOR UNITARIO (R$)": valor_unitario.group(1).replace("R$", "").strip() if valor_unitario else "",
-        "VALOR DA NFE (R$)": valor_total.group(1).replace("R$", "").strip() if valor_total else "",
-        "Local": "",
-        "Trecho": ""
     }
 
-def encontrar_proxima_linha(sheet):
-    """Acha a primeira linha vazia na planilha."""
-    for row in range(2, sheet.max_row + 2):
-        if sheet.cell(row=row, column=3).value is None:  # Verifica se a coluna C está vazia
+def encontrar_proxima_linha(ws):
+    """Acha a primeira linha vazia na planilha, pulando células mescladas."""
+    for row in range(2, ws.max_row + 2):
+        # Verifica se a célula C (coluna 3) está vazia e não é mesclada
+        celula_c = ws.cell(row=row, column=3)
+        if hasattr(celula_c, 'value') and celula_c.value is None:
             return row
-    return sheet.max_row + 1
+    return ws.max_row + 1
 
-def mapear_colunas(ws):
-    """Mapeia os nomes das colunas para seus índices."""
-    mapeamento = {}
-    for col in range(1, ws.max_column + 1):
-        nome_coluna = ws.cell(row=1, column=col).value
-        if nome_coluna:
-            # Remove espaços extras e converte para maiúsculo
-            nome_limpo = str(nome_coluna).strip().upper()
-            mapeamento[nome_limpo] = col
-            print(f"Coluna {col}: '{nome_coluna}' -> '{nome_limpo}'")
-    return mapeamento
+def is_celula_mesclada(ws, row, col):
+    """Verifica se uma célula está em um range mesclado."""
+    for merged_range in ws.merged_cells.ranges:
+        if merged_range.min_row <= row <= merged_range.max_row and \
+           merged_range.min_col <= col <= merged_range.max_col:
+            return True
+    return False
+
+def escrever_em_celula(ws, row, col, valor, fill=None):
+    """Escreve em uma célula, lidando com células mescladas."""
+    try:
+        celula = ws.cell(row=row, column=col)
+        celula.value = valor
+        if fill:
+            celula.fill = fill
+        return True
+    except AttributeError as e:
+        if "'MergedCell' object attribute 'value' is read-only" in str(e):
+            print(f"Aviso: Célula {row},{col} está mesclada. Pulando...")
+            return False
+        else:
+            raise
 
 # =========================
 # PROCESSAMENTO
 # =========================
-wb = load_workbook(CAMINHO_PLANILHA)
-ws = wb.active
+if not esperar_arquivo_liberado(CAMINHO_PLANILHA):
+    print("❌ Não foi possível acessar a planilha. Verifique se ela está fechada.")
+    exit()
 
-print("=== MAPEAMENTO DE COLUNAS ===")
-mapeamento_colunas = mapear_colunas(ws)
-print(f"Colunas mapeadas: {mapeamento_colunas}")
-print("=============================")
+try:
+    wb = load_workbook(CAMINHO_PLANILHA)
+    ws = wb.active
+except Exception as e:
+    print(f"❌ Erro ao carregar a planilha: {e}")
+    exit()
 
 amarelo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
 # Mapeamento direto das colunas que você quer preencher
-# (baseado nos nomes exatos que estão na sua planilha)
 colunas_alvo = {
-    "DATA RECEBIMENTO": "C",        # Coluna C
-    "DESCRIÇÃO ESPECIFICA": "D",    # Coluna D  
-    "NFE": "E",                     # Coluna E
-    "UNID": "F",                    # Coluna F
-    "QTDD": "G",                    # Coluna G
-    "VOLUMES OU BOBINAS OU CONJUNTOS": "H",  # Coluna H
-    "FORNECEDOR": "J",              # Coluna J
-    "VALOR UNITARIO (R$)": "K"      # Coluna K
+    "DATA RECEBIMENTO": 3,        # Coluna C
+    "DESCRIÇÃO ESPECIFICA": 4,    # Coluna D  
+    "NFE": 5,                     # Coluna E
+    "UNID": 6,                    # Coluna F
+    "QTDD": 7,                    # Coluna G
+    "VOLUMES OU BOBINAS OU CONJUNTOS": 8,  # Coluna H
+    "FORNECEDOR": 10,             # Coluna J
+    "VALOR UNITARIO (R$)": 11     # Coluna K
 }
 
 for arquivo in os.listdir(PASTA_NFS):
@@ -160,7 +188,6 @@ for arquivo in os.listdir(PASTA_NFS):
         print(f"Processando Imagem: {arquivo}")
         texto = ocr_from_image(caminho_arquivo)
 
-    # DEBUG: mostrar texto extraído
     print("\n=== TEXTO EXTRAÍDO DO OCR ===")
     print(texto[:500] + "..." if len(texto) > 500 else texto)
     print("=== FIM DO TEXTO ===\n")
@@ -172,21 +199,27 @@ for arquivo in os.listdir(PASTA_NFS):
     print(f"Linha para preencher: {linha}")
     
     # Preencher as colunas específicas
-    for coluna_nome, coluna_letra in colunas_alvo.items():
-        col_idx = ord(coluna_letra.upper()) - 64  # Converte letra para número (A=1, B=2, etc.)
+    for coluna_nome, col_idx in colunas_alvo.items():
         valor = dados.get(coluna_nome, "")
         
-        print(f"Preenchendo coluna {coluna_letra} ({col_idx}) com: '{valor}'")
+        print(f"Preenchendo coluna {col_idx} com: '{valor}'")
         
-        celula = ws.cell(row=linha, column=col_idx, value=valor)
+        # Verificar se a célula está mesclada
+        if is_celula_mesclada(ws, linha, col_idx):
+            print(f"Aviso: Célula {linha},{col_idx} está mesclada. Pulando...")
+            continue
+            
+        sucesso = escrever_em_celula(ws, linha, col_idx, valor, amarelo if not valor else None)
         
-        # Marcar células vazias em amarelo
-        if not valor:
-            celula.fill = amarelo
+        if not sucesso:
+            print(f"Erro ao preencher célula {linha},{col_idx}")
 
     # Salvar após cada arquivo processado
-    wb.save(CAMINHO_PLANILHA)
-    print(f"✅ Dados da NF {dados.get('NFE', 'N/A')} adicionados na linha {linha}")
-    print(f"✅ Planilha salva: {CAMINHO_PLANILHA}")
+    try:
+        wb.save(CAMINHO_PLANILHA)
+        print(f"✅ Dados da NF {dados.get('NFE', 'N/A')} adicionados na linha {linha}")
+        print(f"✅ Planilha salva: {CAMINHO_PLANILHA}")
+    except Exception as e:
+        print(f"❌ Erro ao salvar planilha: {e}")
 
-print("✅ Processamento concluído e planilha atualizada!")
+print("✅ Processamento concluído!")
