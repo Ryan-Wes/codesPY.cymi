@@ -105,7 +105,7 @@ def extrair_dados(texto):
 def encontrar_proxima_linha(sheet):
     """Acha a primeira linha vazia na planilha."""
     for row in range(2, sheet.max_row + 2):
-        if all(sheet.cell(row=row, column=col).value is None for col in range(1, 14)):
+        if sheet.cell(row=row, column=3).value is None:  # Verifica se a coluna C está vazia
             return row
     return sheet.max_row + 1
 
@@ -115,7 +115,10 @@ def mapear_colunas(ws):
     for col in range(1, ws.max_column + 1):
         nome_coluna = ws.cell(row=1, column=col).value
         if nome_coluna:
-            mapeamento[nome_coluna.upper()] = col
+            # Remove espaços extras e converte para maiúsculo
+            nome_limpo = str(nome_coluna).strip().upper()
+            mapeamento[nome_limpo] = col
+            print(f"Coluna {col}: '{nome_coluna}' -> '{nome_limpo}'")
     return mapeamento
 
 # =========================
@@ -123,32 +126,39 @@ def mapear_colunas(ws):
 # =========================
 wb = load_workbook(CAMINHO_PLANILHA)
 ws = wb.active
+
+print("=== MAPEAMENTO DE COLUNAS ===")
 mapeamento_colunas = mapear_colunas(ws)
+print(f"Colunas mapeadas: {mapeamento_colunas}")
+print("=============================")
+
 amarelo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
-# Ordem das colunas que você quer preencher
-colunas_alvo = [
-    "DATA RECEBIMENTO",        # Coluna C
-    "DESCRIÇÃO ESPECIFICA",    # Coluna D  
-    "NFE",                     # Coluna E
-    "UNID",                    # Coluna F
-    "QTDD",                    # Coluna G
-    "VOLUMES OU BOBINAS OU CONJUNTOS",  # Coluna H
-    "FORNECEDOR",              # Coluna J
-    "VALOR UNITARIO (R$)"      # Coluna K
-]
+# Mapeamento direto das colunas que você quer preencher
+# (baseado nos nomes exatos que estão na sua planilha)
+colunas_alvo = {
+    "DATA RECEBIMENTO": "C",        # Coluna C
+    "DESCRIÇÃO ESPECIFICA": "D",    # Coluna D  
+    "NFE": "E",                     # Coluna E
+    "UNID": "F",                    # Coluna F
+    "QTDD": "G",                    # Coluna G
+    "VOLUMES OU BOBINAS OU CONJUNTOS": "H",  # Coluna H
+    "FORNECEDOR": "J",              # Coluna J
+    "VALOR UNITARIO (R$)": "K"      # Coluna K
+}
 
 for arquivo in os.listdir(PASTA_NFS):
     caminho_arquivo = os.path.join(PASTA_NFS, arquivo)
     
+    if not (arquivo.lower().endswith(".pdf") or arquivo.lower().endswith((".png", ".jpg", ".jpeg"))):
+        continue
+        
     if arquivo.lower().endswith(".pdf"):
         print(f"Processando PDF: {arquivo}")
         texto = ocr_from_pdf(caminho_arquivo)
-    elif arquivo.lower().endswith((".png", ".jpg", ".jpeg")):
+    else:
         print(f"Processando Imagem: {arquivo}")
         texto = ocr_from_image(caminho_arquivo)
-    else:
-        continue
 
     # DEBUG: mostrar texto extraído
     print("\n=== TEXTO EXTRAÍDO DO OCR ===")
@@ -159,19 +169,24 @@ for arquivo in os.listdir(PASTA_NFS):
     linha = encontrar_proxima_linha(ws)
     
     print(f"Dados extraídos: {dados}")
+    print(f"Linha para preencher: {linha}")
     
-    # Preencher apenas as colunas específicas
-    for coluna_nome in colunas_alvo:
-        if coluna_nome in mapeamento_colunas:
-            col_idx = mapeamento_colunas[coluna_nome]
-            valor = dados.get(coluna_nome, "")
-            celula = ws.cell(row=linha, column=col_idx, value=valor)
-            
-            # Marcar células vazias em amarelo
-            if not valor:
-                celula.fill = amarelo
+    # Preencher as colunas específicas
+    for coluna_nome, coluna_letra in colunas_alvo.items():
+        col_idx = ord(coluna_letra.upper()) - 64  # Converte letra para número (A=1, B=2, etc.)
+        valor = dados.get(coluna_nome, "")
+        
+        print(f"Preenchendo coluna {coluna_letra} ({col_idx}) com: '{valor}'")
+        
+        celula = ws.cell(row=linha, column=col_idx, value=valor)
+        
+        # Marcar células vazias em amarelo
+        if not valor:
+            celula.fill = amarelo
 
+    # Salvar após cada arquivo processado
     wb.save(CAMINHO_PLANILHA)
     print(f"✅ Dados da NF {dados.get('NFE', 'N/A')} adicionados na linha {linha}")
+    print(f"✅ Planilha salva: {CAMINHO_PLANILHA}")
 
 print("✅ Processamento concluído e planilha atualizada!")
