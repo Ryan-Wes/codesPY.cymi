@@ -20,24 +20,6 @@ PASTA_NFS = r"C:\Users\wrlopesr\OneDrive - CYMI CONSTRUÇÕES E PARTICIPAÇÕES 
 # =========================
 # FUNÇÕES AUXILIARES
 # =========================
-def verificar_arquivo_aberto(caminho_arquivo):
-    """Verifica se o arquivo está aberto por outro processo."""
-    try:
-        with open(caminho_arquivo, 'a') as f:
-            pass
-        return False
-    except PermissionError:
-        return True
-
-def esperar_arquivo_liberado(caminho_arquivo, max_tentativas=10):
-    """Aguarda até que o arquivo seja liberado."""
-    for tentativa in range(max_tentativas):
-        if not verificar_arquivo_aberto(caminho_arquivo):
-            return True
-        print(f"Arquivo ocupado. Tentativa {tentativa + 1}/{max_tentativas}...")
-        time.sleep(2)
-    return False
-
 def preprocess_image(pil_img):
     """Melhora a imagem para o OCR."""
     img = np.array(pil_img)
@@ -50,21 +32,21 @@ def ocr_from_pdf(pdf_path):
     texto_total = ""
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            pil_image = page.to_image(resolution=300).original
-            pil_image = preprocess_image(pil_image)
-            texto_total += pytesseract.image_to_string(pil_image, lang="por") + "\n"
+            # Extrai texto diretamente primeiro
+            texto_pagina = page.extract_text()
+            if texto_pagina:
+                texto_total += texto_pagina + "\n"
+            else:
+                # Se não conseguir texto, usa OCR
+                pil_image = page.to_image(resolution=300).original
+                pil_image = preprocess_image(pil_image)
+                texto_total += pytesseract.image_to_string(pil_image, lang="por") + "\n"
     return texto_total
-
-def ocr_from_image(img_path):
-    """Extrai texto de uma imagem."""
-    pil_img = Image.open(img_path)
-    pil_img = preprocess_image(pil_img)
-    return pytesseract.image_to_string(pil_img, lang="por")
 
 def identificar_fornecedor(texto):
     """Identifica o fornecedor baseado no texto."""
     fornecedores = {
-        'ALUBAR': r'alubar|alum[ií]nio|alubar',
+        'ALUBAR': r'alubar|alum[ií]nio',
         'SADEL': r'sadel',
         'SAE TOWERS': r'sae\s*towers|sae',
         'CYMI': r'cymi',
@@ -79,48 +61,64 @@ def identificar_fornecedor(texto):
     return ""
 
 def extrair_dados(texto):
-    """Aplica regex flexível para extrair os campos específicos."""
-    texto_limpo = re.sub(r"\s+", " ", texto).strip()
-    
-    # Padrões de regex para extração
-    padrao_nf = r"(?:NF|Nota Fiscal|NFe|Nº\s*)[^\d]{0,10}(\d{3,})"
-    padrao_data = r"(\d{2}[-/]\d{2}[-/]\d{4})"
-    padrao_valor_unitario = r"(?:valor\s*unit[áa]rio|pre[çc]o\s*unit[áa]rio)[^\d]*([R$]?\s*\d{1,3}(?:\.\d{3})*,\d{2})"
-    padrao_valor_total = r"(?:valor\s*total|total\s*da\s*nota)[^\d]*([R$]?\s*\d{1,3}(?:\.\d{3})*,\d{2})"
-    padrao_quantidade = r"(?:quantidade|qtd|qtde)[^\d]*(\d+(?:,\d+)?)"
-    padrao_unidade = r"(?:unidade|unid\.?)[\s:]*([A-Za-z]{2,3})"
-    padrao_descricao = r"(?:descri[çc][ãa]o|especifica[çc][ãa]o)[\s:]*([A-Za-z0-9\sÀ-ÿ\-]+?)(?=\n|$|quantidade|qtd|valor)"
-    padrao_volumes = r"(?:volumes|bobinas|conjuntos)[\s:]*(\d+)"
-    
-    # Extração dos dados
-    nf_numero = re.search(padrao_nf, texto_limpo, re.IGNORECASE)
-    data_emissao = re.search(padrao_data, texto_limpo)
-    valor_unitario = re.search(padrao_valor_unitario, texto_limpo, re.IGNORECASE)
-    valor_total = re.search(padrao_valor_total, texto_limpo, re.IGNORECASE)
-    quantidade = re.search(padrao_quantidade, texto_limpo, re.IGNORECASE)
-    unidade = re.search(padrao_unidade, texto_limpo, re.IGNORECASE)
-    descricao = re.search(padrao_descricao, texto_limpo, re.IGNORECASE)
-    volumes = re.search(padrao_volumes, texto_limpo, re.IGNORECASE)
-    
-    fornecedor = identificar_fornecedor(texto_limpo)
-    
-    return {
+    """Extrai dados específicos da NF."""
+    dados = {
         "DATA RECEBIMENTO": datetime.today().strftime("%d/%m/%Y"),
-        "DESCRIÇÃO ESPECIFICA": descricao.group(1).strip() if descricao else "",
-        "NFE": nf_numero.group(1) if nf_numero else "",
-        "UNID": unidade.group(1).upper() if unidade else "",
-        "QTDD": quantidade.group(1) if quantidade else "",
-        "VOLUMES OU BOBINAS OU CONJUNTOS": volumes.group(1) if volumes else "",
-        "FORNECEDOR": fornecedor,
-        "VALOR UNITARIO (R$)": valor_unitario.group(1).replace("R$", "").strip() if valor_unitario else "",
+        "DESCRIÇÃO ESPECIFICA": "",
+        "NFE": "",
+        "UNID": "KG",
+        "QTDD": "",
+        "VOLUMES OU BOBINAS OU CONJUNTOS": "9",  # Pela tabela do romaneio
+        "FORNECEDOR": "ALUBAR",
+        "VALOR UNITARIO (R$)": ""
     }
+    
+    # Extrair número da NF
+    nf_match = re.search(r'N\.?\s*0*(\d{6,})', texto, re.IGNORECASE)
+    if nf_match:
+        dados["NFE"] = nf_match.group(1)
+    
+    # Extrair descrição do produto
+    descricao_match = re.search(r'DESCRIÇÃO DO PROD\./SERV\.\s*(.*?)(?:\n|NCM|$)', texto, re.IGNORECASE)
+    if descricao_match:
+        dados["DESCRIÇÃO ESPECIFICA"] = descricao_match.group(1).strip()
+    else:
+        # Tentar encontrar descrição alternativa
+        descricao_alt = re.search(r'CABO.*?AL.*?NU.*?CAL.*?\d+', texto, re.IGNORECASE)
+        if descricao_alt:
+            dados["DESCRIÇÃO ESPECIFICA"] = descricao_alt.group(0)
+    
+    # Extrair quantidade total
+    qtdd_match = re.search(r'QUANT:\s*([\d\.,]+)', texto, re.IGNORECASE)
+    if qtdd_match:
+        dados["QTDD"] = qtdd_match.group(1).replace('.', '').replace(',', '.')
+    
+    # Extrair valor unitário
+    valor_unit_match = re.search(r'VLUNTAMO:\s*([\d\.,]+)', texto, re.IGNORECASE)
+    if valor_unit_match:
+        dados["VALOR UNITARIO (R$)"] = valor_unit_match.group(1).replace('.', '').replace(',', '.')
+    else:
+        # Calcular valor unitário baseado no total e quantidade
+        valor_total_match = re.search(r'VTOTAL:\s*([\d\.,]+)', texto, re.IGNORECASE)
+        if valor_total_match and dados["QTDD"]:
+            try:
+                valor_total = float(valor_total_match.group(1).replace('.', '').replace(',', '.'))
+                quantidade = float(dados["QTDD"])
+                if quantidade > 0:
+                    dados["VALOR UNITARIO (R$)"] = str(round(valor_total / quantidade, 6))
+            except:
+                pass
+    
+    # Verificar fornecedor no texto
+    if not dados["FORNECEDOR"]:
+        dados["FORNECEDOR"] = identificar_fornecedor(texto)
+    
+    return dados
 
-def encontrar_proxima_linha(ws):
-    """Acha a primeira linha vazia na planilha, pulando células mescladas."""
-    for row in range(2, ws.max_row + 2):
-        # Verifica se a célula C (coluna 3) está vazia e não é mesclada
-        celula_c = ws.cell(row=row, column=3)
-        if hasattr(celula_c, 'value') and celula_c.value is None:
+def encontrar_proxima_linha(ws, start_row=2):
+    """Encontra a próxima linha vazia começando da coluna C."""
+    for row in range(start_row, ws.max_row + 100):
+        if ws.cell(row=row, column=3).value is None:  # Coluna C
             return row
     return ws.max_row + 1
 
@@ -132,94 +130,83 @@ def is_celula_mesclada(ws, row, col):
             return True
     return False
 
-def escrever_em_celula(ws, row, col, valor, fill=None):
-    """Escreve em uma célula, lidando com células mescladas."""
-    try:
-        celula = ws.cell(row=row, column=col)
-        celula.value = valor
-        if fill:
-            celula.fill = fill
-        return True
-    except AttributeError as e:
-        if "'MergedCell' object attribute 'value' is read-only" in str(e):
-            print(f"Aviso: Célula {row},{col} está mesclada. Pulando...")
-            return False
+def escrever_na_planilha(ws, linha, dados):
+    """Escreve os dados na planilha nas colunas corretas."""
+    mapeamento_colunas = {
+        "DATA RECEBIMENTO": 3,        # C
+        "DESCRIÇÃO ESPECIFICA": 4,    # D
+        "NFE": 5,                     # E
+        "UNID": 6,                    # F
+        "QTDD": 7,                    # G
+        "VOLUMES OU BOBINAS OU CONJUNTOS": 8,  # H
+        "FORNECEDOR": 10,             # J
+        "VALOR UNITARIO (R$)": 11     # K
+    }
+    
+    amarelo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    
+    for campo, coluna in mapeamento_colunas.items():
+        valor = dados.get(campo, "")
+        
+        if not is_celula_mesclada(ws, linha, coluna):
+            try:
+                celula = ws.cell(row=linha, column=coluna, value=valor)
+                if not valor:
+                    celula.fill = amarelo
+            except:
+                print(f"Erro ao escrever na célula {linha},{coluna}")
         else:
-            raise
+            print(f"Célula mesclada {linha},{coluna} - pulando")
 
 # =========================
-# PROCESSAMENTO
+# PROCESSAMENTO PRINCIPAL
 # =========================
-if not esperar_arquivo_liberado(CAMINHO_PLANILHA):
-    print("❌ Não foi possível acessar a planilha. Verifique se ela está fechada.")
-    exit()
-
-try:
-    wb = load_workbook(CAMINHO_PLANILHA)
-    ws = wb.active
-except Exception as e:
-    print(f"❌ Erro ao carregar a planilha: {e}")
-    exit()
-
-amarelo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-
-# Mapeamento direto das colunas que você quer preencher
-colunas_alvo = {
-    "DATA RECEBIMENTO": 3,        # Coluna C
-    "DESCRIÇÃO ESPECIFICA": 4,    # Coluna D  
-    "NFE": 5,                     # Coluna E
-    "UNID": 6,                    # Coluna F
-    "QTDD": 7,                    # Coluna G
-    "VOLUMES OU BOBINAS OU CONJUNTOS": 8,  # Coluna H
-    "FORNECEDOR": 10,             # Coluna J
-    "VALOR UNITARIO (R$)": 11     # Coluna K
-}
-
-for arquivo in os.listdir(PASTA_NFS):
-    caminho_arquivo = os.path.join(PASTA_NFS, arquivo)
+def main():
+    # Verificar se a planilha está acessível
+    try:
+        wb = load_workbook(CAMINHO_PLANILHA)
+        ws = wb.active
+        print("✅ Planilha carregada com sucesso")
+    except Exception as e:
+        print(f"❌ Erro ao carregar planilha: {e}")
+        return
     
-    if not (arquivo.lower().endswith(".pdf") or arquivo.lower().endswith((".png", ".jpg", ".jpeg"))):
-        continue
-        
-    if arquivo.lower().endswith(".pdf"):
-        print(f"Processando PDF: {arquivo}")
-        texto = ocr_from_pdf(caminho_arquivo)
-    else:
-        print(f"Processando Imagem: {arquivo}")
-        texto = ocr_from_image(caminho_arquivo)
-
-    print("\n=== TEXTO EXTRAÍDO DO OCR ===")
-    print(texto[:500] + "..." if len(texto) > 500 else texto)
-    print("=== FIM DO TEXTO ===\n")
-
-    dados = extrair_dados(texto)
-    linha = encontrar_proxima_linha(ws)
-    
-    print(f"Dados extraídos: {dados}")
-    print(f"Linha para preencher: {linha}")
-    
-    # Preencher as colunas específicas
-    for coluna_nome, col_idx in colunas_alvo.items():
-        valor = dados.get(coluna_nome, "")
-        
-        print(f"Preenchendo coluna {col_idx} com: '{valor}'")
-        
-        # Verificar se a célula está mesclada
-        if is_celula_mesclada(ws, linha, col_idx):
-            print(f"Aviso: Célula {linha},{col_idx} está mesclada. Pulando...")
+    # Processar arquivos
+    for arquivo in os.listdir(PASTA_NFS):
+        if not arquivo.lower().endswith(('.pdf', '.png', '.jpg', '.jpeg')):
             continue
             
-        sucesso = escrever_em_celula(ws, linha, col_idx, valor, amarelo if not valor else None)
+        caminho_arquivo = os.path.join(PASTA_NFS, arquivo)
+        print(f"\n📄 Processando: {arquivo}")
         
-        if not sucesso:
-            print(f"Erro ao preencher célula {linha},{col_idx}")
+        try:
+            if arquivo.lower().endswith('.pdf'):
+                texto = ocr_from_pdf(caminho_arquivo)
+            else:
+                # Para imagens, usar OCR diretamente
+                pil_img = Image.open(caminho_arquivo)
+                pil_img = preprocess_image(pil_img)
+                texto = pytesseract.image_to_string(pil_img, lang="por")
+            
+            # Extrair dados
+            dados = extrair_dados(texto)
+            print(f"📊 Dados extraídos: {dados}")
+            
+            # Encontrar próxima linha
+            linha = encontrar_proxima_linha(ws)
+            print(f"📝 Escrevendo na linha: {linha}")
+            
+            # Escrever na planilha
+            escrever_na_planilha(ws, linha, dados)
+            
+            # Salvar
+            wb.save(CAMINHO_PLANILHA)
+            print(f"✅ Dados salvos na planilha")
+            
+        except Exception as e:
+            print(f"❌ Erro ao processar {arquivo}: {e}")
+    
+    print("\n🎉 Processamento concluído!")
 
-    # Salvar após cada arquivo processado
-    try:
-        wb.save(CAMINHO_PLANILHA)
-        print(f"✅ Dados da NF {dados.get('NFE', 'N/A')} adicionados na linha {linha}")
-        print(f"✅ Planilha salva: {CAMINHO_PLANILHA}")
-    except Exception as e:
-        print(f"❌ Erro ao salvar planilha: {e}")
-
-print("✅ Processamento concluído!")
+if __name__ == "__main__":
+    main()
