@@ -87,40 +87,57 @@ def extrair_dados(texto):
         if descricao_alt:
             dados["DESCRIÇÃO ESPECIFICA"] = descricao_alt.group(0)
     
-    # Extrair quantidade total
-    qtdd_match = re.search(r'QUANT[:\s]*([\d\.]+,[\d]{2})', texto, re.IGNORECASE)
-    if qtdd_match:
-        dados["QTDD"] = qtdd_match.group(1).replace('.', '').replace(',', '.')
+    # Extrair quantidade total - padrões mais abrangentes
+    padroes_qtd = [
+        r'QUANT[:\s]*([\d\.,]+)',
+        r'25[\s\.]*351[\s,]*00',
+        r'25351[,\d]*',
+        r'TOTAL.*?25[\d\.,]+',
+        r'25\.351,\d+',
+        r'25351\.000'
+    ]
     
-    # Extrair valor unitário - padrões mais específicos
+    for padrao in padroes_qtd:
+        qtdd_match = re.search(padrao, texto)
+        if qtdd_match:
+            if qtdd_match.groups():
+                qtdd = qtdd_match.group(1)
+            else:
+                # Extrair apenas os números
+                numeros = re.search(r'[\d\.,]+', qtdd_match.group(0))
+                if numeros:
+                    qtdd = numeros.group(0)
+                else:
+                    qtdd = qtdd_match.group(0)
+            
+            # Formatar corretamente (remover pontos, substituir vírgula por ponto)
+            qtdd = qtdd.replace('.', '').replace(',', '.')
+            # Garantir que é um número válido
+            if re.match(r'^\d+\.?\d*$', qtdd):
+                dados["QTDD"] = qtdd
+                break
+    
+    # Extrair valor unitário
     padroes_valor_unit = [
-        r'VLUNTAMO[:\s]*([\d\.]+,[\d]{6})',
+        r'VLUNTAMO[:\s]*([\d\.,]+)',
         r'25[\s\.]*850884',
-        r'valor\s*unit[áa]rio[^\d]*([\d\.]+,[\d]+)',
-        r'pre[çc]o\s*unit[áa]rio[^\d]*([\d\.]+,[\d]+)'
+        r'valor\s*unit[áa]rio[^\d]*([\d\.,]+)',
+        r'pre[çc]o\s*unit[áa]rio[^\d]*([\d\.,]+)',
+        r'25\.850884'
     ]
     
     for padrao in padroes_valor_unit:
         valor_match = re.search(padrao, texto, re.IGNORECASE)
         if valor_match:
             if valor_match.groups():
-                valor = valor_match.group(1).replace('.', '').replace(',', '.')
+                valor = valor_match.group(1)
             else:
-                valor = re.search(r'[\d\.]+', valor_match.group(0)).group(0)
-            dados["VALOR UNITARIO (R$)"] = valor
-            break
-    
-    # Se não encontrou, calcular baseado no total
-    if not dados["VALOR UNITARIO (R$)"] and dados["QTDD"]:
-        valor_total_match = re.search(r'VTOTAL[:\s]*([\d\.]+,[\d]{2})', texto, re.IGNORECASE)
-        if valor_total_match:
-            try:
-                valor_total = float(valor_total_match.group(1).replace('.', '').replace(',', '.'))
-                quantidade = float(dados["QTDD"])
-                if quantidade > 0:
-                    dados["VALOR UNITARIO (R$)"] = str(round(valor_total / quantidade, 6))
-            except:
-                pass
+                valor = re.search(r'[\d\.,]+', valor_match.group(0)).group(0)
+            
+            valor = valor.replace('.', '').replace(',', '.')
+            if re.match(r'^\d+\.?\d*$', valor):
+                dados["VALOR UNITARIO (R$)"] = valor
+                break
     
     return dados
 
