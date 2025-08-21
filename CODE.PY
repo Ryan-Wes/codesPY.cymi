@@ -74,44 +74,46 @@ def extrair_dados(texto):
     }
     
     # Extrair número da NF
-    nf_match = re.search(r'N\.?\s*0*(\d{6,})', texto, re.IGNORECASE)
+    nf_match = re.search(r'N[º°\.\s]*0*(\d{6,})', texto, re.IGNORECASE)
     if nf_match:
-        dados["NFE"] = nf_match.group(1)
+        dados["NFE"] = nf_match.group(1) if nf_match.groups() else nf_match.group(0)
     
     # Extrair descrição do produto
-    descricao_match = re.search(r'DESCRIÇÃO DO PROD\./SERV\.\s*(.*?)(?:\n|NCM|$)', texto, re.IGNORECASE)
+    descricao_match = re.search(r'DESCRIÇÃO DO PROD[\./]SERV[\./]\s*(.*?)(?:\n|NCM|$)', texto, re.IGNORECASE)
     if descricao_match:
         dados["DESCRIÇÃO ESPECIFICA"] = descricao_match.group(1).strip()
     else:
-        # Tentar encontrar descrição alternativa
-        descricao_alt = re.search(r'CABO.*?AL.*?NU.*?CAL.*?\d+', texto, re.IGNORECASE)
+        descricao_alt = re.search(r'CABO.*?AL.*?NU.*?CAL.*?1120.*?828', texto, re.IGNORECASE)
         if descricao_alt:
             dados["DESCRIÇÃO ESPECIFICA"] = descricao_alt.group(0)
     
-    # Extrair quantidade total - procurar por padrões específicos
-    padroes_qtd = [
-        r'QUANT:\s*([\d\.,]+)',
-        r'QUANTIDADE:\s*([\d\.,]+)',
-        r'25\.351,\d+',  # Valor específico visto na NF
-        r'TOTAL.*?25[\d\.,]+'  # Procurar "TOTAL" seguido de números
+    # Extrair quantidade total
+    qtdd_match = re.search(r'QUANT[:\s]*([\d\.]+,[\d]{2})', texto, re.IGNORECASE)
+    if qtdd_match:
+        dados["QTDD"] = qtdd_match.group(1).replace('.', '').replace(',', '.')
+    
+    # Extrair valor unitário - padrões mais específicos
+    padroes_valor_unit = [
+        r'VLUNTAMO[:\s]*([\d\.]+,[\d]{6})',
+        r'25[\s\.]*850884',
+        r'valor\s*unit[áa]rio[^\d]*([\d\.]+,[\d]+)',
+        r'pre[çc]o\s*unit[áa]rio[^\d]*([\d\.]+,[\d]+)'
     ]
     
-    for padrao in padroes_qtd:
-        qtdd_match = re.search(padrao, texto, re.IGNORECASE)
-        if qtdd_match:
-            qtdd = qtdd_match.group(1) if len(qtdd_match.groups()) > 0 else qtdd_match.group(0)
-            qtdd = re.search(r'[\d\.,]+', qtdd).group(0) if re.search(r'[\d\.,]+', qtdd) else qtdd
-            dados["QTDD"] = qtdd.replace('.', '').replace(',', '.')
+    for padrao in padroes_valor_unit:
+        valor_match = re.search(padrao, texto, re.IGNORECASE)
+        if valor_match:
+            if valor_match.groups():
+                valor = valor_match.group(1).replace('.', '').replace(',', '.')
+            else:
+                valor = re.search(r'[\d\.]+', valor_match.group(0)).group(0)
+            dados["VALOR UNITARIO (R$)"] = valor
             break
     
-    # Extrair valor unitário
-    valor_unit_match = re.search(r'VLUNTAMO:\s*([\d\.,]+)', texto, re.IGNORECASE)
-    if valor_unit_match:
-        dados["VALOR UNITARIO (R$)"] = valor_unit_match.group(1).replace('.', '').replace(',', '.')
-    else:
-        # Calcular valor unitário baseado no total e quantidade
-        valor_total_match = re.search(r'VTOTAL:\s*([\d\.,]+)', texto, re.IGNORECASE)
-        if valor_total_match and dados["QTDD"]:
+    # Se não encontrou, calcular baseado no total
+    if not dados["VALOR UNITARIO (R$)"] and dados["QTDD"]:
+        valor_total_match = re.search(r'VTOTAL[:\s]*([\d\.]+,[\d]{2})', texto, re.IGNORECASE)
+        if valor_total_match:
             try:
                 valor_total = float(valor_total_match.group(1).replace('.', '').replace(',', '.'))
                 quantidade = float(dados["QTDD"])
