@@ -34,7 +34,7 @@ def ocr_from_pdf(pdf_path):
         for page in pdf.pages:
             # Extrai texto diretamente primeiro
             texto_pagina = page.extract_text()
-            if texto_paga:
+            if texto_pagina:
                 texto_total += texto_pagina + "\n"
             else:
                 # Se não conseguir texto, usa OCR
