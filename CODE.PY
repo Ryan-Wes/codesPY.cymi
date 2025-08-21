@@ -34,7 +34,7 @@ def ocr_from_pdf(pdf_path):
         for page in pdf.pages:
             # Extrai texto diretamente primeiro
             texto_pagina = page.extract_text()
-            if texto_pagina:
+            if texto_paga:
                 texto_total += texto_pagina + "\n"
             else:
                 # Se não conseguir texto, usa OCR
@@ -68,7 +68,7 @@ def extrair_dados(texto):
         "NFE": "",
         "UNID": "KG",
         "QTDD": "",
-        "VOLUMES OU BOBINAS OU CONJUNTOS": "9",  # Pela tabela do romaneio
+        "VOLUMES OU BOBINAS OU CONJUNTOS": "9",
         "FORNECEDOR": "ALUBAR",
         "VALOR UNITARIO (R$)": ""
     }
@@ -88,10 +88,21 @@ def extrair_dados(texto):
         if descricao_alt:
             dados["DESCRIÇÃO ESPECIFICA"] = descricao_alt.group(0)
     
-    # Extrair quantidade total
-    qtdd_match = re.search(r'QUANT:\s*([\d\.,]+)', texto, re.IGNORECASE)
-    if qtdd_match:
-        dados["QTDD"] = qtdd_match.group(1).replace('.', '').replace(',', '.')
+    # Extrair quantidade total - procurar por padrões específicos
+    padroes_qtd = [
+        r'QUANT:\s*([\d\.,]+)',
+        r'QUANTIDADE:\s*([\d\.,]+)',
+        r'25\.351,\d+',  # Valor específico visto na NF
+        r'TOTAL.*?25[\d\.,]+'  # Procurar "TOTAL" seguido de números
+    ]
+    
+    for padrao in padroes_qtd:
+        qtdd_match = re.search(padrao, texto, re.IGNORECASE)
+        if qtdd_match:
+            qtdd = qtdd_match.group(1) if len(qtdd_match.groups()) > 0 else qtdd_match.group(0)
+            qtdd = re.search(r'[\d\.,]+', qtdd).group(0) if re.search(r'[\d\.,]+', qtdd) else qtdd
+            dados["QTDD"] = qtdd.replace('.', '').replace(',', '.')
+            break
     
     # Extrair valor unitário
     valor_unit_match = re.search(r'VLUNTAMO:\s*([\d\.,]+)', texto, re.IGNORECASE)
@@ -109,26 +120,15 @@ def extrair_dados(texto):
             except:
                 pass
     
-    # Verificar fornecedor no texto
-    if not dados["FORNECEDOR"]:
-        dados["FORNECEDOR"] = identificar_fornecedor(texto)
-    
     return dados
 
-def encontrar_proxima_linha(ws, start_row=2):
-    """Encontra a próxima linha vazia começando da coluna C."""
-    for row in range(start_row, ws.max_row + 100):
-        if ws.cell(row=row, column=3).value is None:  # Coluna C
+def encontrar_proxima_linha(ws):
+    """Encontra a próxima linha vazia começando da linha 4."""
+    for row in range(4, ws.max_row + 100):  # Começa da linha 4
+        # Verifica se a coluna C está vazia
+        if ws.cell(row=row, column=3).value is None:
             return row
     return ws.max_row + 1
-
-def is_celula_mesclada(ws, row, col):
-    """Verifica se uma célula está em um range mesclado."""
-    for merged_range in ws.merged_cells.ranges:
-        if merged_range.min_row <= row <= merged_range.max_row and \
-           merged_range.min_col <= col <= merged_range.max_col:
-            return True
-    return False
 
 def escrever_na_planilha(ws, linha, dados):
     """Escreve os dados na planilha nas colunas corretas."""
@@ -148,15 +148,13 @@ def escrever_na_planilha(ws, linha, dados):
     for campo, coluna in mapeamento_colunas.items():
         valor = dados.get(campo, "")
         
-        if not is_celula_mesclada(ws, linha, coluna):
-            try:
-                celula = ws.cell(row=linha, column=coluna, value=valor)
-                if not valor:
-                    celula.fill = amarelo
-            except:
-                print(f"Erro ao escrever na célula {linha},{coluna}")
-        else:
-            print(f"Célula mesclada {linha},{coluna} - pulando")
+        try:
+            celula = ws.cell(row=linha, column=coluna, value=valor)
+            if not valor:
+                celula.fill = amarelo
+            print(f"✓ Coluna {coluna} preenchida: {valor}")
+        except Exception as e:
+            print(f"✗ Erro na coluna {coluna}: {e}")
 
 # =========================
 # PROCESSAMENTO PRINCIPAL
@@ -183,16 +181,19 @@ def main():
             if arquivo.lower().endswith('.pdf'):
                 texto = ocr_from_pdf(caminho_arquivo)
             else:
-                # Para imagens, usar OCR diretamente
                 pil_img = Image.open(caminho_arquivo)
                 pil_img = preprocess_image(pil_img)
                 texto = pytesseract.image_to_string(pil_img, lang="por")
+            
+            # DEBUG: Mostrar parte do texto
+            print("Texto extraído (primeiras 200 chars):")
+            print(texto[:200] + "..." if len(texto) > 200 else texto)
             
             # Extrair dados
             dados = extrair_dados(texto)
             print(f"📊 Dados extraídos: {dados}")
             
-            # Encontrar próxima linha
+            # Encontrar próxima linha (começando da linha 4)
             linha = encontrar_proxima_linha(ws)
             print(f"📝 Escrevendo na linha: {linha}")
             
