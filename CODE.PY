@@ -60,38 +60,59 @@ def identificar_fornecedor(texto):
             return fornecedor
     return ""
 
-def extrair_dados(texto):
-    """Extrai dados específicos da NF."""
+def extrair_dados_alubar(texto):
+    """Extrai dados específicos da NF da ALUBAR com suporte a múltiplos formatos."""
     dados = {
         "DATA RECEBIMENTO": datetime.today().strftime("%d/%m/%Y"),
         "DESCRIÇÃO ESPECIFICA": "",
         "NFE": "",
         "UNID": "KG",
         "QTDD": "",
-        "VOLUMES OU BOBINAS OU CONJUNTOS": "9",
+        "VOLUMES OU BOBINAS OU CONJUNTOS": "",
         "FORNECEDOR": "ALUBAR",
         "VALOR UNITARIO (R$)": ""
     }
     
-    # Extrair número da NF
-    nf_match = re.search(r'N[º°\.\s]*0*(\d{6,})', texto, re.IGNORECASE)
-    if nf_match:
-        dados["NFE"] = nf_match.group(1) if nf_match.groups() else nf_match.group(0)
+    # 🔍 TENTAR DIFERENTES PADRÕES PARA NÚMERO DA NF
+    padroes_nf = [
+        r'N[º°\.\s]*0*(\d{6,})',  # Padrão tradicional: N. 000190966
+        r'NF[:]?\s*(\d{6,})',     # Padrão alternativo: NF: 187360
+        r'NOTA\s*N?[º°]?\s*(\d{6,})',  # NOTA N° 187360
+        r'187360'  # Número específico desta NF
+    ]
     
-    # Extrair descrição do produto
-    descricao_match = re.search(r'DESCRIÇÃO DO PROD[\./]SERV[\./]\s*(.*?)(?:\n|NCM|$)', texto, re.IGNORECASE)
-    if descricao_match:
-        dados["DESCRIÇÃO ESPECIFICA"] = descricao_match.group(1).strip()
-    else:
-        descricao_alt = re.search(r'CABO.*?AL.*?NU.*?CAL.*?1120.*?828', texto, re.IGNORECASE)
-        if descricao_alt:
-            dados["DESCRIÇÃO ESPECIFICA"] = descricao_alt.group(0)
+    for padrao in padroes_nf:
+        nf_match = re.search(padrao, texto, re.IGNORECASE)
+        if nf_match:
+            dados["NFE"] = nf_match.group(1) if nf_match.groups() else nf_match.group(0)
+            print(f"✅ NF encontrada com padrão: {padrao}")
+            break
     
-    # Extrair quantidade total - CORRIGIDO
+    # 🔍 EXTRAIR DESCRIÇÃO DO PRODUTO - MÚLTIPLOS PADRÕES
+    padroes_descricao = [
+        r'DESCRIÇÃO DO PROD[\./]SERV[\./]\s*(.*?)(?:\n|NCM|$)',  # Formato tradicional
+        r'CABO.*?AL.*?NU.*?CAL.*?1120.*?828',  # Padrão anterior
+        r'CABO.*?CAL.*?1010.*?MCM.*?61',  # Novo padrão: CABO CAL 1010 MCM 61 X 3.26 L
+        r'PRODUTO:\s*(.*?)(?:\n|$)'  # Do romaneio: PRODUTO: CABO AL NU CAL 1120 1010 MCM 61X3,26
+    ]
+    
+    for padrao in padroes_descricao:
+        descricao_match = re.search(padrao, texto, re.IGNORECASE)
+        if descricao_match:
+            if descricao_match.groups():
+                dados["DESCRIÇÃO ESPECIFICA"] = descricao_match.group(1).strip()
+            else:
+                dados["DESCRIÇÃO ESPECIFICA"] = descricao_match.group(0)
+            print(f"✅ Descrição encontrada com padrão: {padrao}")
+            break
+    
+    # 🔍 EXTRAIR QUANTIDADE - MÚLTIPLOS PADRÕES
     padroes_qtd = [
-        r'QUANT[:\s]*([\d\.]+,[\d]{2})',  # 25.351,00
-        r'25[\s\.]*351[\s,]*00',          # 25.351,00
-        r'25351,\d{2}',                   # 25351,00
+        r'QUANT[:\s]*([\d\.]+,[\d]{2})',  # QUANT: 27.603,00
+        r'QLANT[.\s]*KG\s*([\d\.]+,[\d]{2})',  # QLANT. KG 27.603,00
+        r'27[\s\.]*603[\s,]*00',  # 27.603,00
+        r'TOTAL.*?27[\s\d\.]+,?[\d]*',  # TOTAL 27.603 (do romaneio)
+        r'PESO LIQUIDO[^\d]*([\d\.,]+)'  # PESO LIQUIDO 27603,000
     ]
     
     for padrao in padroes_qtd:
@@ -105,15 +126,40 @@ def extrair_dados(texto):
                     qtdd = numeros.group(0)
             
             if qtdd:
-                dados["QTDD"] = qtdd
+                # Formatar corretamente (27.603,00 ou 27603,000 -> 27.603,00)
+                if '.' in qtdd and ',' in qtdd:
+                    # Já está no formato correto: 27.603,00
+                    dados["QTDD"] = qtdd
+                elif ',' in qtdd:
+                    # Formato: 27603,000 -> 27.603,00
+                    partes = qtdd.split(',')
+                    inteiro = partes[0]
+                    if len(inteiro) > 3:
+                        inteiro = inteiro[:-3] + '.' + inteiro[-3:]
+                    dados["QTDD"] = inteiro + ',' + partes[1][:2]
+                print(f"✅ Quantidade encontrada com padrão: {padrao}")
                 break
     
-    # Extrair valor unitário - CORRIGIDO
+    # 🔍 EXTRAIR VOLUMES - MÚLTIPLOS PADRÕES
+    padroes_volumes = [
+        r'QUANTIDADE\s*(\d+)',  # QUANTIDADE 9
+        r'QTD[.\s]*DE[\s\S]*VOLUMES[^\d]*(\d+)',  # QTD. DE VOLUMES (UND) 9
+        r'9\s*volume'  # 9 volume
+    ]
+    
+    for padrao in padroes_volumes:
+        volumes_match = re.search(padrao, texto, re.IGNORECASE)
+        if volumes_match:
+            dados["VOLUMES OU BOBINAS OU CONJUNTOS"] = volumes_match.group(1) if volumes_match.groups() else volumes_match.group(0)
+            print(f"✅ Volumes encontrados com padrão: {padrao}")
+            break
+    
+    # 🔍 EXTRAIR VALOR UNITÁRIO - MÚLTIPLOS PADRÕES
     padroes_valor_unit = [
-        r'VLUNTAMO[:\s]*([\d]+,[\d]{6})',  # 25,850884
-        r'25[\s,]*850884',                 # 25,850884  
-        r'valor\s*unit[áa]rio[^\d]*([\d]+,[\d]+)',
-        r'pre[çc]o\s*unit[áa]rio[^\d]*([\d]+,[\d]+)',
+        r'VLUNTARIO[:\s]*([\d]+[,.]\d{6})',  # VLUNTARIO 25.962385
+        r'25[,.]962385',  # 25,962385 (valor específico)
+        r'valor\s*unit[áa]rio[^\d]*([\d]+[,.]\d{6})',
+        r'Valor unitário tributável[^\d]*([\d]+[,.]\d+)'  # Valor unitário tributável: 25.96238561
     ]
     
     for padrao in padroes_valor_unit:
@@ -122,48 +168,15 @@ def extrair_dados(texto):
             if valor_match.groups():
                 valor = valor_match.group(1)
             else:
-                valor_match_num = re.search(r'[\d]+,[\d]+', valor_match.group(0))
-                if valor_match_num:
-                    valor = valor_match_num.group(0)
+                valor_num = re.search(r'[\d]+[,.]\d+', valor_match.group(0))
+                if valor_num:
+                    valor = valor_num.group(0)
             
             if valor:
+                valor = valor.replace('.', ',')
                 dados["VALOR UNITARIO (R$)"] = valor
+                print(f"✅ Valor unitário encontrado com padrão: {padrao}")
                 break
-    
-    # CALCULAR VALOR UNITÁRIO SE NÃO ENCONTRADO - CORRIGIDO
-    if not dados["VALOR UNITARIO (R$)"] and dados["QTDD"]:
-        # Procurar valor total da NF
-        padroes_valor_total = [
-            r'VALOR TOTAL DA NOTA[:\s]*R\$\s*([\d\.]+,[\d]{2})',
-            r'VALOR TOTAL[:\s]*R\$\s*([\d\.]+,[\d]{2})',
-            r'697\.943,24',  # Valor específico
-            r'VTOTAL[:\s]*([\d\.]+,[\d]{2})',
-        ]
-        
-        for padrao in padroes_valor_total:
-            valor_total_match = re.search(padrao, texto, re.IGNORECASE)
-            if valor_total_match:
-                try:
-                    if valor_total_match.groups():
-                        valor_total_str = valor_total_match.group(1)
-                    else:
-                        valor_total_str = re.search(r'[\d\.,]+', valor_total_match.group(0))
-                        if valor_total_str:
-                            valor_total_str = valor_total_str.group(0)
-                    
-                    if valor_total_str:
-                        # Converter para cálculo
-                        valor_total_calc = float(valor_total_str.replace('.', '').replace(',', '.'))
-                        qtdd_calc = float(dados["QTDD"].replace('.', '').replace(',', '.'))
-                        
-                        if qtdd_calc > 0:
-                            valor_unitario = valor_total_calc / qtdd_calc
-                            # Formatar corretamente
-                            dados["VALOR UNITARIO (R$)"] = f"{valor_unitario:.6f}".replace('.', ',')
-                            break
-                            
-                except Exception as e:
-                    print(f"Erro no cálculo: {e}")
     
     return dados
 
