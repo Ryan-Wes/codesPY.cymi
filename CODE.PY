@@ -87,14 +87,11 @@ def extrair_dados(texto):
         if descricao_alt:
             dados["DESCRIÇÃO ESPECIFICA"] = descricao_alt.group(0)
     
-    # Extrair quantidade total - padrões mais abrangentes
+    # Extrair quantidade total - FORMATO BRASILEIRO: 25.351,00 (25 mil 351)
     padroes_qtd = [
-        r'QUANT[:\s]*([\d\.,]+)',
-        r'25[\s\.]*351[\s,]*00',
-        r'25351[,\d]*',
-        r'TOTAL.*?25[\d\.,]+',
-        r'25\.351,\d+',
-        r'25351\.000'
+        r'QUANT[:\s]*([\d\.]+,[\d]{2})',  # 25.351,00
+        r'25[\s\.]*351[\s,]*00',          # 25.351,00
+        r'25351[,\d]*',                   # 25351,00
     ]
     
     for padrao in padroes_qtd:
@@ -103,27 +100,24 @@ def extrair_dados(texto):
             if qtdd_match.groups():
                 qtdd = qtdd_match.group(1)
             else:
-                # Extrair apenas os números
                 numeros = re.search(r'[\d\.,]+', qtdd_match.group(0))
                 if numeros:
                     qtdd = numeros.group(0)
                 else:
                     qtdd = qtdd_match.group(0)
             
-            # Formatar corretamente (remover pontos, substituir vírgula por ponto)
-            qtdd = qtdd.replace('.', '').replace(',', '.')
-            # Garantir que é um número válido
-            if re.match(r'^\d+\.?\d*$', qtdd):
-                dados["QTDD"] = qtdd
-                break
+            # FORMATO BRASILEIRO: manter como está (25.351,00)
+            # Excel entende esse formato automaticamente
+            dados["QTDD"] = qtdd
+            break
     
-    # Extrair valor unitário
+    # Extrair valor unitário - FORMATO BRASILEIRO: 25,850884 (25 reais e 85 centavos)
     padroes_valor_unit = [
-        r'VLUNTAMO[:\s]*([\d\.,]+)',
-        r'25[\s\.]*850884',
-        r'valor\s*unit[áa]rio[^\d]*([\d\.,]+)',
-        r'pre[çc]o\s*unit[áa]rio[^\d]*([\d\.,]+)',
-        r'25\.850884'
+        r'VLUNTAMO[:\s]*([\d]+\,[\d]{6})',  # 25,850884
+        r'25[\s\,]*850884',                 # 25,850884  
+        r'valor\s*unit[áa]rio[^\d]*([\d]+,[\d]+)',
+        r'pre[çc]o\s*unit[áa]rio[^\d]*([\d]+,[\d]+)',
+        r'25\,850884'
     ]
     
     for padrao in padroes_valor_unit:
@@ -132,12 +126,30 @@ def extrair_dados(texto):
             if valor_match.groups():
                 valor = valor_match.group(1)
             else:
-                valor = re.search(r'[\d\.,]+', valor_match.group(0)).group(0)
+                valor = re.search(r'[\d]+\,[\d]+', valor_match.group(0)).group(0)
             
-            valor = valor.replace('.', '').replace(',', '.')
-            if re.match(r'^\d+\.?\d*$', valor):
-                dados["VALOR UNITARIO (R$)"] = valor
-                break
+            # FORMATO BRASILEIRO: manter vírgula decimal (25,850884)
+            dados["VALOR UNITARIO (R$)"] = valor
+            break
+    
+    # Se não encontrou valor unitário, calcular baseado no total
+    if not dados["VALOR UNITARIO (R$)"] and dados["QTDD"]:
+        valor_total_match = re.search(r'VTOTAL[:\s]*([\d\.]+,[\d]{2})', texto, re.IGNORECASE)
+        if valor_total_match:
+            try:
+                # Converter para cálculo: 25.351,00 -> 25351.00
+                qtdd_calc = dados["QTDD"].replace('.', '').replace(',', '.')
+                valor_total_calc = valor_total_match.group(1).replace('.', '').replace(',', '.')
+                
+                valor_total = float(valor_total_calc)
+                quantidade = float(qtdd_calc)
+                
+                if quantidade > 0:
+                    valor_unitario = valor_total / quantidade
+                    # Formatar de volta para BR: 25.850884 -> 25,850884
+                    dados["VALOR UNITARIO (R$)"] = f"{valor_unitario:,.6f}".replace('.', 'X').replace(',', '.').replace('X', ',')
+            except:
+                pass
     
     return dados
 
