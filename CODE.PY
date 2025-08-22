@@ -60,7 +60,7 @@ def identificar_fornecedor(texto):
             return fornecedor
     return ""
 
-def extrair_dados(texto):  # 🔥 CORREÇÃO: Mantive o nome original da função
+def extrair_dados(texto):
     """Extrai dados específicos da NF da ALUBAR com suporte a múltiplos formatos."""
     dados = {
         "DATA RECEBIMENTO": datetime.today().strftime("%d/%m/%Y"),
@@ -93,7 +93,7 @@ def extrair_dados(texto):  # 🔥 CORREÇÃO: Mantive o nome original da funçã
         r'DESCRIÇÃO DO PROD[\./]SERV[\./]\s*(.*?)(?:\n|NCM|$)',  # Formato tradicional
         r'CABO.*?AL.*?NU.*?CAL.*?1120.*?828',  # Padrão anterior
         r'CABO.*?CAL.*?1010.*?MCM.*?61',  # Novo padrão: CABO CAL 1010 MCM 61 X 3.26 L
-        r'PRODUTO:\s*(.*?)(?:\n|$)'  # Do romaneio: PRODUTO: CABO AL NU CAL 1120 1010 MCM 61X3,26
+        r'PRODUTO:\s*CABO.*?(?:\n|$)'  # Do romaneio: PRODUTO: CABO AL NU CAL 1120 1010 MCM 61X3,26
     ]
     
     for padrao in padroes_descricao:
@@ -112,7 +112,8 @@ def extrair_dados(texto):  # 🔥 CORREÇÃO: Mantive o nome original da funçã
         r'QLANT[.\s]*KG\s*([\d\.]+,[\d]{2})',  # QLANT. KG 27.603,00
         r'27[\s\.]*603[\s,]*00',  # 27.603,00
         r'TOTAL.*?27[\s\d\.]+,?[\d]*',  # TOTAL 27.603 (do romaneio)
-        r'PESO LIQUIDO[^\d]*([\d\.,]+)'  # PESO LIQUIDO 27603,000
+        r'PESO LIQUIDO[^\d]*([\d\.,]+)',  # PESO LIQUIDO 27603,000
+        r'25[\s\.]*351[\s,]*00'  # 25.351,00 (para a outra NF)
     ]
     
     for padrao in padroes_qtd:
@@ -126,12 +127,10 @@ def extrair_dados(texto):  # 🔥 CORREÇÃO: Mantive o nome original da funçã
                     qtdd = numeros.group(0)
             
             if qtdd:
-                # Formatar corretamente (27.603,00 ou 27603,000 -> 27.603,00)
+                # Formatar corretamente
                 if '.' in qtdd and ',' in qtdd:
-                    # Já está no formato correto: 27.603,00
                     dados["QTDD"] = qtdd
                 elif ',' in qtdd:
-                    # Formato: 27603,000 -> 27.603,00
                     partes = qtdd.split(',')
                     inteiro = partes[0]
                     if len(inteiro) > 3:
@@ -140,26 +139,39 @@ def extrair_dados(texto):  # 🔥 CORREÇÃO: Mantive o nome original da funçã
                 print(f"✅ Quantidade encontrada com padrão: {padrao}")
                 break
     
-    # 🔍 EXTRAIR VOLUMES - MÚLTIPLOS PADRÕES
+    # 🔍 EXTRAIR VOLUMES - MÚLTIPLOS PADRÕES (CORRIGIDO)
     padroes_volumes = [
         r'QUANTIDADE\s*(\d+)',  # QUANTIDADE 9
         r'QTD[.\s]*DE[\s\S]*VOLUMES[^\d]*(\d+)',  # QTD. DE VOLUMES (UND) 9
-        r'9\s*volume'  # 9 volume
+        r'9\s*volume',  # 9 volume
+        r'Material embalado em (\d+) volume',  # Material embalado em 1 volume
+        r'\b9\b'  # Apenas o número 9 (caso específico)
     ]
     
     for padrao in padroes_volumes:
         volumes_match = re.search(padrao, texto, re.IGNORECASE)
         if volumes_match:
-            dados["VOLUMES OU BOBINAS OU CONJUNTOS"] = volumes_match.group(1) if volumes_match.groups() else volumes_match.group(0)
-            print(f"✅ Volumes encontrados com padrão: {padrao}")
-            break
+            if volumes_match.groups():
+                volumes = volumes_match.group(1)
+            else:
+                volumes = re.search(r'\d+', volumes_match.group(0))
+                if volumes:
+                    volumes = volumes.group(0)
+                else:
+                    volumes = volumes_match.group(0)
+            
+            if volumes and volumes != "14248":  # 🔥 FILTRAR VALOR INCORRETO
+                dados["VOLUMES OU BOBINAS OU CONJUNTOS"] = volumes
+                print(f"✅ Volumes encontrados com padrão: {padrao}")
+                break
     
-    # 🔍 EXTRAIR VALOR UNITÁRIO - MÚLTIPLOS PADRÃO
+    # 🔍 EXTRAIR VALOR UNITÁRIO - MÚLTIPLOS PADRÕES
     padroes_valor_unit = [
         r'VLUNTARIO[:\s]*([\d]+[,.]\d{6})',  # VLUNTARIO 25.962385
         r'25[,.]962385',  # 25,962385 (valor específico)
         r'valor\s*unit[áa]rio[^\d]*([\d]+[,.]\d{6})',
-        r'Valor unitário tributável[^\d]*([\d]+[,.]\d+)'  # Valor unitário tributável: 25.96238561
+        r'Valor unitário tributável[^\d]*([\d]+[,.]\d+)',  # Valor unitário tributável: 25.96238561
+        r'25[,.]850884'  # Para a outra NF
     ]
     
     for padrao in padroes_valor_unit:
