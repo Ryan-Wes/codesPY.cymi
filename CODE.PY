@@ -60,7 +60,7 @@ def identificar_fornecedor(texto):
             return fornecedor
     return ""
 
-def extrair_dados_alubar(texto):
+def extrair_dados(texto):  # 🔥 CORREÇÃO: Mantive o nome original da função
     """Extrai dados específicos da NF da ALUBAR com suporte a múltiplos formatos."""
     dados = {
         "DATA RECEBIMENTO": datetime.today().strftime("%d/%m/%Y"),
@@ -154,7 +154,7 @@ def extrair_dados_alubar(texto):
             print(f"✅ Volumes encontrados com padrão: {padrao}")
             break
     
-    # 🔍 EXTRAIR VALOR UNITÁRIO - MÚLTIPLOS PADRÕES
+    # 🔍 EXTRAIR VALOR UNITÁRIO - MÚLTIPLOS PADRÃO
     padroes_valor_unit = [
         r'VLUNTARIO[:\s]*([\d]+[,.]\d{6})',  # VLUNTARIO 25.962385
         r'25[,.]962385',  # 25,962385 (valor específico)
@@ -241,7 +241,7 @@ def main():
             # DEBUG: mostrar texto encontrado
             print("🔍 Procurando por dados na NF...")
             
-            dados = extrair_dados(texto)
+            dados = extrair_dados(texto)  # 🔥 CORREÇÃO: Agora a função existe
             print(f"📊 Dados extraídos:")
             for k, v in dados.items():
                 print(f"   {k}: {v}")
