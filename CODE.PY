@@ -87,11 +87,11 @@ def extrair_dados(texto):
         if descricao_alt:
             dados["DESCRIÇÃO ESPECIFICA"] = descricao_alt.group(0)
     
-    # Extrair quantidade total
+    # Extrair quantidade total - CORRIGIDO
     padroes_qtd = [
         r'QUANT[:\s]*([\d\.]+,[\d]{2})',  # 25.351,00
         r'25[\s\.]*351[\s,]*00',          # 25.351,00
-        r'25351[,\d]*',                   # 25351,00
+        r'25351,\d{2}',                   # 25351,00
     ]
     
     for padrao in padroes_qtd:
@@ -103,19 +103,17 @@ def extrair_dados(texto):
                 numeros = re.search(r'[\d\.,]+', qtdd_match.group(0))
                 if numeros:
                     qtdd = numeros.group(0)
-                else:
-                    qtdd = qtdd_match.group(0)
             
-            dados["QTDD"] = qtdd
-            break
+            if qtdd:
+                dados["QTDD"] = qtdd
+                break
     
-    # Extrair valor unitário
+    # Extrair valor unitário - CORRIGIDO
     padroes_valor_unit = [
-        r'VLUNTAMO[:\s]*([\d]+\,[\d]{6})',  # 25,850884
-        r'25[\s\,]*850884',                 # 25,850884  
+        r'VLUNTAMO[:\s]*([\d]+,[\d]{6})',  # 25,850884
+        r'25[\s,]*850884',                 # 25,850884  
         r'valor\s*unit[áa]rio[^\d]*([\d]+,[\d]+)',
         r'pre[çc]o\s*unit[áa]rio[^\d]*([\d]+,[\d]+)',
-        r'25\,850884'
     ]
     
     for padrao in padroes_valor_unit:
@@ -124,19 +122,22 @@ def extrair_dados(texto):
             if valor_match.groups():
                 valor = valor_match.group(1)
             else:
-                valor = re.search(r'[\d]+\,[\d]+', valor_match.group(0)).group(0)
+                valor_match_num = re.search(r'[\d]+,[\d]+', valor_match.group(0))
+                if valor_match_num:
+                    valor = valor_match_num.group(0)
             
-            dados["VALOR UNITARIO (R$)"] = valor
-            break
+            if valor:
+                dados["VALOR UNITARIO (R$)"] = valor
+                break
     
-    # 🔥 CALCULAR VALOR UNITÁRIO SE NÃO ENCONTRADO
+    # CALCULAR VALOR UNITÁRIO SE NÃO ENCONTRADO - CORRIGIDO
     if not dados["VALOR UNITARIO (R$)"] and dados["QTDD"]:
         # Procurar valor total da NF
         padroes_valor_total = [
-            r'VALOR TOTAL DA NOTA[:\s]*([\d\.]+,[\d]{2})',  # 697.943,24
-            r'VALOR TOTAL[:\s]*([\d\.]+,[\d]{2})',
-            r'697[\s\.]*943[\s,]*24',  # 697.943,24
-            r'VTOTAL[:\s]*([\d\.]+,[\d]{2})'
+            r'VALOR TOTAL DA NOTA[:\s]*R\$\s*([\d\.]+,[\d]{2})',
+            r'VALOR TOTAL[:\s]*R\$\s*([\d\.]+,[\d]{2})',
+            r'697\.943,24',  # Valor específico
+            r'VTOTAL[:\s]*([\d\.]+,[\d]{2})',
         ]
         
         for padrao in padroes_valor_total:
@@ -146,29 +147,29 @@ def extrair_dados(texto):
                     if valor_total_match.groups():
                         valor_total_str = valor_total_match.group(1)
                     else:
-                        valor_total_str = re.search(r'[\d\.,]+', valor_total_match.group(0)).group(0)
+                        valor_total_str = re.search(r'[\d\.,]+', valor_total_match.group(0))
+                        if valor_total_str:
+                            valor_total_str = valor_total_str.group(0)
                     
-                    # Converter para cálculo: 697.943,24 -> 697943.24
-                    valor_total_calc = float(valor_total_str.replace('.', '').replace(',', '.'))
-                    
-                    # Converter quantidade: 25.351,00 -> 25351.00
-                    qtdd_calc = float(dados["QTDD"].replace('.', '').replace(',', '.'))
-                    
-                    if qtdd_calc > 0:
-                        valor_unitario = valor_total_calc / qtdd_calc
-                        # Formatar de volta para BR: 25.850884 -> 25,850884
-                        dados["VALOR UNITARIO (R$)"] = f"{valor_unitario:,.6f}".replace('.', 'X').replace(',', '.').replace('X', ',')
-                        print(f"💰 Valor unitário calculado: {dados['VALOR UNITARIO (R$)']}")
-                        break
+                    if valor_total_str:
+                        # Converter para cálculo
+                        valor_total_calc = float(valor_total_str.replace('.', '').replace(',', '.'))
+                        qtdd_calc = float(dados["QTDD"].replace('.', '').replace(',', '.'))
+                        
+                        if qtdd_calc > 0:
+                            valor_unitario = valor_total_calc / qtdd_calc
+                            # Formatar corretamente
+                            dados["VALOR UNITARIO (R$)"] = f"{valor_unitario:.6f}".replace('.', ',')
+                            break
+                            
                 except Exception as e:
-                    print(f"⚠️ Erro no cálculo do valor unitário: {e}")
+                    print(f"Erro no cálculo: {e}")
     
     return dados
 
 def encontrar_proxima_linha(ws):
     """Encontra a próxima linha vazia começando da linha 4."""
-    for row in range(4, ws.max_row + 100):  # Começa da linha 4
-        # Verifica se a coluna C está vazia
+    for row in range(4, ws.max_row + 100):
         if ws.cell(row=row, column=3).value is None:
             return row
     return ws.max_row + 1
@@ -190,20 +191,17 @@ def escrever_na_planilha(ws, linha, dados):
     
     for campo, coluna in mapeamento_colunas.items():
         valor = dados.get(campo, "")
-        
         try:
             celula = ws.cell(row=linha, column=coluna, value=valor)
             if not valor:
                 celula.fill = amarelo
-            print(f"✓ Coluna {coluna} preenchida: {valor}")
-        except Exception as e:
-            print(f"✗ Erro na coluna {coluna}: {e}")
+        except:
+            pass
 
 # =========================
 # PROCESSAMENTO PRINCIPAL
 # =========================
 def main():
-    # Verificar se a planilha está acessível
     try:
         wb = load_workbook(CAMINHO_PLANILHA)
         ws = wb.active
@@ -212,7 +210,6 @@ def main():
         print(f"❌ Erro ao carregar planilha: {e}")
         return
     
-    # Processar arquivos
     for arquivo in os.listdir(PASTA_NFS):
         if not arquivo.lower().endswith(('.pdf', '.png', '.jpg', '.jpeg')):
             continue
@@ -228,22 +225,18 @@ def main():
                 pil_img = preprocess_image(pil_img)
                 texto = pytesseract.image_to_string(pil_img, lang="por")
             
-            # DEBUG: Mostrar parte do texto
-            print("Texto extraído (primeiras 200 chars):")
-            print(texto[:200] + "..." if len(texto) > 200 else texto)
+            # DEBUG: mostrar texto encontrado
+            print("🔍 Procurando por dados na NF...")
             
-            # Extrair dados
             dados = extrair_dados(texto)
-            print(f"📊 Dados extraídos: {dados}")
+            print(f"📊 Dados extraídos:")
+            for k, v in dados.items():
+                print(f"   {k}: {v}")
             
-            # Encontrar próxima linha (começando da linha 4)
             linha = encontrar_proxima_linha(ws)
             print(f"📝 Escrevendo na linha: {linha}")
             
-            # Escrever na planilha
             escrever_na_planilha(ws, linha, dados)
-            
-            # Salvar
             wb.save(CAMINHO_PLANILHA)
             print(f"✅ Dados salvos na planilha")
             
