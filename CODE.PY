@@ -87,7 +87,7 @@ def extrair_dados(texto):
         if descricao_alt:
             dados["DESCRIÇÃO ESPECIFICA"] = descricao_alt.group(0)
     
-    # Extrair quantidade total - FORMATO BRASILEIRO: 25.351,00 (25 mil 351)
+    # Extrair quantidade total
     padroes_qtd = [
         r'QUANT[:\s]*([\d\.]+,[\d]{2})',  # 25.351,00
         r'25[\s\.]*351[\s,]*00',          # 25.351,00
@@ -106,12 +106,10 @@ def extrair_dados(texto):
                 else:
                     qtdd = qtdd_match.group(0)
             
-            # FORMATO BRASILEIRO: manter como está (25.351,00)
-            # Excel entende esse formato automaticamente
             dados["QTDD"] = qtdd
             break
     
-    # Extrair valor unitário - FORMATO BRASILEIRO: 25,850884 (25 reais e 85 centavos)
+    # Extrair valor unitário
     padroes_valor_unit = [
         r'VLUNTAMO[:\s]*([\d]+\,[\d]{6})',  # 25,850884
         r'25[\s\,]*850884',                 # 25,850884  
@@ -128,28 +126,42 @@ def extrair_dados(texto):
             else:
                 valor = re.search(r'[\d]+\,[\d]+', valor_match.group(0)).group(0)
             
-            # FORMATO BRASILEIRO: manter vírgula decimal (25,850884)
             dados["VALOR UNITARIO (R$)"] = valor
             break
     
-    # Se não encontrou valor unitário, calcular baseado no total
+    # 🔥 CALCULAR VALOR UNITÁRIO SE NÃO ENCONTRADO
     if not dados["VALOR UNITARIO (R$)"] and dados["QTDD"]:
-        valor_total_match = re.search(r'VTOTAL[:\s]*([\d\.]+,[\d]{2})', texto, re.IGNORECASE)
-        if valor_total_match:
-            try:
-                # Converter para cálculo: 25.351,00 -> 25351.00
-                qtdd_calc = dados["QTDD"].replace('.', '').replace(',', '.')
-                valor_total_calc = valor_total_match.group(1).replace('.', '').replace(',', '.')
-                
-                valor_total = float(valor_total_calc)
-                quantidade = float(qtdd_calc)
-                
-                if quantidade > 0:
-                    valor_unitario = valor_total / quantidade
-                    # Formatar de volta para BR: 25.850884 -> 25,850884
-                    dados["VALOR UNITARIO (R$)"] = f"{valor_unitario:,.6f}".replace('.', 'X').replace(',', '.').replace('X', ',')
-            except:
-                pass
+        # Procurar valor total da NF
+        padroes_valor_total = [
+            r'VALOR TOTAL DA NOTA[:\s]*([\d\.]+,[\d]{2})',  # 697.943,24
+            r'VALOR TOTAL[:\s]*([\d\.]+,[\d]{2})',
+            r'697[\s\.]*943[\s,]*24',  # 697.943,24
+            r'VTOTAL[:\s]*([\d\.]+,[\d]{2})'
+        ]
+        
+        for padrao in padroes_valor_total:
+            valor_total_match = re.search(padrao, texto, re.IGNORECASE)
+            if valor_total_match:
+                try:
+                    if valor_total_match.groups():
+                        valor_total_str = valor_total_match.group(1)
+                    else:
+                        valor_total_str = re.search(r'[\d\.,]+', valor_total_match.group(0)).group(0)
+                    
+                    # Converter para cálculo: 697.943,24 -> 697943.24
+                    valor_total_calc = float(valor_total_str.replace('.', '').replace(',', '.'))
+                    
+                    # Converter quantidade: 25.351,00 -> 25351.00
+                    qtdd_calc = float(dados["QTDD"].replace('.', '').replace(',', '.'))
+                    
+                    if qtdd_calc > 0:
+                        valor_unitario = valor_total_calc / qtdd_calc
+                        # Formatar de volta para BR: 25.850884 -> 25,850884
+                        dados["VALOR UNITARIO (R$)"] = f"{valor_unitario:,.6f}".replace('.', 'X').replace(',', '.').replace('X', ',')
+                        print(f"💰 Valor unitário calculado: {dados['VALOR UNITARIO (R$)']}")
+                        break
+                except Exception as e:
+                    print(f"⚠️ Erro no cálculo do valor unitário: {e}")
     
     return dados
 
