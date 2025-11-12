@@ -79,19 +79,6 @@ Realiza a extração completa de dados de **notas fiscais (NFs)** brasileiras:
 
 ---
 
-## 📁 Structure / Estrutura
-codesPY.cymi/
-│
-├── src/
-│ ├── nf_extractor.py
-│ ├── extracao_nf_alubar.py
-│ ├── planta_perfil.py
-│
-├── requirements.txt
-└── README.md
-
----
-
 ## 👨‍💻 Author / Autor
 **Wesley Ryan Lopes da Rocha**  
 [LinkedIn](https://www.linkedin.com/in/wryan-lopes/) | [Portfolio](https://ryan-wes.github.io/portfolio/)
