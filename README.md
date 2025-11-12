@@ -62,5 +62,5 @@ Projeto criado para otimizar processos em uma **empresa internacional de Linha d
 ---
 
 ## 👨‍💻 Author / Autor
-**Wesley Ryan Lopes da Rocha**  
+**WRyan**  
 [LinkedIn](https://www.linkedin.com/in/wryan-lopes/) | [Portfolio](https://ryan-wes.github.io/portfolio/)
