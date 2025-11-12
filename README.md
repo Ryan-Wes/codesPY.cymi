@@ -1,87 +1,97 @@
-
-
-<h1 align="center">NF Data Extractor | Python + OCR</h1>
+<h1 align="center">Data Extraction & Automation Tools</h1>
 
 <p align="center">
-  <b>Automation for extracting and validating structured data from Brazilian invoices (NFs) using Python and OCR.</b>
+  <b>Python scripts developed to automate data extraction and structuring for engineering and material tracking workflows.</b>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/OCR-Tesseract-green?logo=google" />
-  <img src="https://img.shields.io/badge/Data-pandas-orange?logo=pandas" />
-  <img src="https://img.shields.io/badge/Excel-openpyxl-lightgrey?logo=microsoft-excel" />
-  <img src="https://img.shields.io/badge/Status-Active-7130B1?logo=github" />
+  <img src="https://img.shields.io/badge/OCR-Tesseract-success?logo=google&logoColor=white" />
+  <img src="https://img.shields.io/badge/Data-pandas-orange?logo=pandas&logoColor=white" />
+  <img src="https://img.shields.io/badge/PDF-PyMuPDF-lightgrey?logo=adobeacrobatreader&logoColor=white" />
+  <img src="https://img.shields.io/badge/Status-In%20Development-7130B1" />
 </p>
-
-<br>
-<br>
-<br>
-<br>
-
-# 🧠 NF Data Extractor | Python + OCR
-
-Automation script developed to **extract and validate data from Brazilian invoices (NFs)** received from suppliers, optimizing manual verification in material management processes.
 
 ---
 
-## 🇬🇧 English Version
+## 🇺🇸 English Version
 
-### ⚙️ How it works
-- Reads **PDF or image files** of invoices using **OCR (Optical Character Recognition)**.  
-- Cleans and validates extracted text to identify **supplier names, invoice numbers, item codes, and quantities**.  
-- Outputs structured data directly into **Excel spreadsheets** used for material tracking and control.  
-- Reduces manual verification time from hours to just a few minutes.
+### 🧩 Overview
+This repository contains a set of **Python automation scripts** designed to support internal workflows in large-scale **Transmission Line engineering projects**.  
+They handle the extraction, cleaning, and structuring of unformatted data (from PDFs, images, and NFs) into usable Excel datasets.
 
-### 🧩 Stack
-- **Python 3**  
-- **pytesseract** (OCR engine)  
-- **pandas** for data structuring and export  
-- **openpyxl** for Excel integration  
-- **re** and **string processing** for cleaning NF data  
+> ⚠️ **Note:** This project is currently in **active development and testing phase**. Some modules are being optimized for broader use and improved robustness.
 
-### 📊 Use case
-Originally built to support operations at an international **Transmission Line company**, improving accuracy and efficiency in invoice validation.
+### ⚙️ Components
+**1. `code_legacy.py`**  
+Performs end-to-end extraction of structured data from Brazilian invoices (NFs):  
+- Uses **PDF text extraction** and **OCR (Tesseract)** as fallback.  
+- Detects key information such as supplier name, invoice number, quantity, and unit value.  
+- Writes the processed data directly into an Excel control sheet (`openpyxl`), filling missing cells in yellow.  
+- Includes error handling, logging, and multiple regex strategies for robustness.
 
-### 🚀 Results
-- Reduced human error in NF transcription by **~90%**.  
-- Processing time per batch dropped from ~2 hours to **under 10 minutes**.  
-- Data automatically formatted for internal Excel dashboards.
+**2. `extracao_nf_alubar.py`**  
+- Scans folders of PDF invoices.  
+- Uses OCR to detect invoice numbers (`NF:` pattern) in the right section of each page.  
+- Outputs a summary report (`resultado_NFs.txt`) listing all unique and repeated invoices found.  
+
+**3. `planta_perfil.py`**  
+- Extracts coordinate data from engineering layout PDFs.  
+- Captures **tower identifiers**, **X/Y coordinates**, **elevation**, and **line angle** values via regex.  
+- Exports a structured report (`resultado.txt`) for validation and integration into construction diagrams.
+
+### 📊 Results
+- Automated what used to be **hours of manual NF verification**.  
+- Created **standardized outputs** ready for Excel dashboards.  
+- Improved **traceability and auditability** of field and supplier data.
 
 ---
 
 ## 🇧🇷 Versão em Português
 
-### ⚙️ Como funciona
-- Lê **arquivos PDF ou imagens** de notas fiscais (NFs) utilizando **OCR (Reconhecimento Óptico de Caracteres)**.  
-- Limpa e valida os textos extraídos para identificar **fornecedores, números de NF, códigos de item e quantidades**.  
-- Exporta os dados estruturados diretamente para **planilhas do Excel**, usadas no controle e rastreamento de materiais.  
-- Reduz o tempo de conferência manual de horas para apenas alguns minutos.
+### 🧩 Visão Geral
+Este repositório reúne **scripts de automação em Python** desenvolvidos para apoiar fluxos de trabalho internos em projetos de **Linhas de Transmissão**.  
+Eles extraem, tratam e estruturam dados não formatados (de PDFs, imagens e NFs) para planilhas Excel e relatórios de acompanhamento.
 
-### 🧩 Tecnologias utilizadas
-- **Python 3**  
-- **pytesseract** (motor OCR)  
-- **pandas** para estruturação e exportação de dados  
-- **openpyxl** para integração com Excel  
-- **re** e manipulação de strings para limpeza dos dados  
+> ⚠️ **Aviso:** Este projeto está em **fase ativa de desenvolvimento e testes**. Alguns módulos ainda estão sendo otimizados para uso mais amplo e maior robustez.
 
-### 📊 Caso de uso
-Projeto criado para otimizar processos em uma **empresa internacional de Linha de Transmissão**, aumentando a precisão e eficiência na validação de notas fiscais.
+### ⚙️ Componentes
+**1. `code_legacy.py`**  
+Realiza a extração completa de dados de **notas fiscais (NFs)** brasileiras:  
+- Usa **leitura direta de PDF** e **OCR (Tesseract)** quando necessário.  
+- Identifica **fornecedor, número da NF, quantidade e valor unitário**.  
+- Grava os dados automaticamente em planilhas de controle Excel (`openpyxl`), destacando campos vazios em amarelo.  
+- Contém logs e múltiplos padrões regex para lidar com formatos diferentes de NF.
 
-### 🚀 Resultados
-- Redução de cerca de **90% nos erros manuais** de digitação.  
-- Tempo médio de processamento caiu de ~2h para **menos de 10 minutos**.  
-- Dados gerados automaticamente no formato exigido pelos relatórios internos do Excel.
+**2. `extracao_nf_alubar.py`**  
+- Varre pastas com PDFs e identifica **números de NF** por OCR.  
+- Gera um relatório (`resultado_NFs.txt`) listando **todas as NFs únicas e repetidas**.  
+
+**3. `planta_perfil.py`**  
+- Extrai dados de coordenadas de **plantas e perfis de torres** em PDF.  
+- Captura **número da torre, coordenadas X/Y, elevação e ângulo da linha**.  
+- Exporta tudo em um relatório (`resultado.txt`) pronto para validação e integração em diagramas.
+
+### 📊 Resultados
+- Reduziu **horas de conferência manual** para minutos.  
+- Padronizou a **estrutura de dados** para relatórios técnicos.  
+- Aumentou a **precisão e rastreabilidade** dos dados de campo e fornecedores.
 
 ---
 
-## 📁 Files / Arquivos
-- `EXTRAÇÃO DE NFs ALUBAR POMPEU.py` → main OCR and extraction script / script principal de OCR e extração  
-- `PLANTAePERFIL.py` → helper for data transformation / script auxiliar para formatação dos dados  
-- `CODE.PY` / `CODES.PY` → older testing scripts / versões anteriores para testes  
+## 📁 Structure / Estrutura
+codesPY.cymi/
+│
+├── src/
+│ ├── code_legacy.py
+│ ├── extracao_nf_alubar.py
+│ ├── planta_perfil.py
+│
+├── requirements.txt
+└── README.md
 
 ---
 
 ## 👨‍💻 Author / Autor
-**WRyan**  
+**Wesley Ryan Lopes da Rocha**  
 [LinkedIn](https://www.linkedin.com/in/wryan-lopes/) | [Portfolio](https://ryan-wes.github.io/portfolio/)
