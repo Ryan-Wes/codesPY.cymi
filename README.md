@@ -23,7 +23,7 @@ They handle the extraction, cleaning, and structuring of unformatted data (from 
 > ⚠️ **Note:** This project is currently in **active development and testing phase**. Some modules are being optimized for broader use and improved robustness.
 
 ### ⚙️ Components
-**1. `code_legacy.py`**  
+**1. `nf_extractor.py`**  
 Performs end-to-end extraction of structured data from Brazilian invoices (NFs):  
 - Uses **PDF text extraction** and **OCR (Tesseract)** as fallback.  
 - Detects key information such as supplier name, invoice number, quantity, and unit value.  
@@ -56,7 +56,7 @@ Eles extraem, tratam e estruturam dados não formatados (de PDFs, imagens e NFs)
 > ⚠️ **Aviso:** Este projeto está em **fase ativa de desenvolvimento e testes**. Alguns módulos ainda estão sendo otimizados para uso mais amplo e maior robustez.
 
 ### ⚙️ Componentes
-**1. `code_legacy.py`**  
+**1. `nf_extractor.py`**  
 Realiza a extração completa de dados de **notas fiscais (NFs)** brasileiras:  
 - Usa **leitura direta de PDF** e **OCR (Tesseract)** quando necessário.  
 - Identifica **fornecedor, número da NF, quantidade e valor unitário**.  
@@ -83,7 +83,7 @@ Realiza a extração completa de dados de **notas fiscais (NFs)** brasileiras:
 codesPY.cymi/
 │
 ├── src/
-│ ├── code_legacy.py
+│ ├── nf_extractor.py
 │ ├── extracao_nf_alubar.py
 │ ├── planta_perfil.py
 │
