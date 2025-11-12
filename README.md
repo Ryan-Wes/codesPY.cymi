@@ -1,3 +1,24 @@
+
+
+<h1 align="center">NF Data Extractor | Python + OCR</h1>
+
+<p align="center">
+  <b>Automation for extracting and validating structured data from Brazilian invoices (NFs) using Python and OCR.</b>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/OCR-Tesseract-green?logo=google" />
+  <img src="https://img.shields.io/badge/Data-pandas-orange?logo=pandas" />
+  <img src="https://img.shields.io/badge/Excel-openpyxl-lightgrey?logo=microsoft-excel" />
+  <img src="https://img.shields.io/badge/Status-Active-7130B1?logo=github" />
+</p>
+
+<br>
+<br>
+<br>
+<br>
+
 # 🧠 NF Data Extractor | Python + OCR
 
 Automation script developed to **extract and validate data from Brazilian invoices (NFs)** received from suppliers, optimizing manual verification in material management processes.
